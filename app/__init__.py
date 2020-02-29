@@ -2,7 +2,7 @@
 
 from flask import Flask
 
-app = Flask(__name__)
+flask_app = Flask(__name__)
 
 # импортируем внизу во избежание циклических импортов внутри пакета
 from app import routes
