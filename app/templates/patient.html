@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf %}
+
+{% block app_content %}
+
+    <div class="container">
+        <div class="row">
+
+            <div class="col-lg-4">
+                <h2>Регистрационные данные</h2>
+                <p><b>Фамилия</b>: {{ patient.registration_data.surname }}</p>
+                <p><b>Имя</b>: {{ patient.registration_data.name }}</p>
+                <p><b>Возраст</b>: {{ patient.registration_data.age }}</p>
+                <p><b>Номер мобильного телефона</b>: {{ patient.registration_data.mobile_number }}</p>
+                <a href="{{ url_for('patient_registration', patient_id=patient.id) }}"
+                   class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">Изменить</a>
+            </div>
+
+            <div class="col-lg-offset-5">
+                <h2>Первичные данные</h2>
+                {% if patient.primary_data %}
+                    {% if patient.primary_data.height is not none %}<p><b>Рост</b>: {{ patient.primary_data.height }} см</p>{% endif %}
+                    {% if patient.primary_data.weight is not none %}<p><b>Вес</b>: {{ patient.primary_data.weight }} кг</p>{% endif %}
+                    {% if patient.primary_data.is_smoking is not none %}<p><b>Курит ?</b>: {% if patient.primary_data.is_smoking %}Да{% else %}Нет{% endif %}</p>{% endif %}
+                    {% if patient.primary_data.complaints is not none %}<p><b>Жалобы</b>: {{ patient.primary_data.complaints }}</p>{% endif %}
+                {% endif %}
+                <a href="{{ url_for('enter_primary_data', patient_id=patient.id) }}"
+                   class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">Изменить</a>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="container" style="margin-top:80px">
+        <div class="row">
+
+            <div class="col-lg-4">
+                <h2>Другие биомаркеры</h2>
+                {% if patient.secondary_biomarkers %}
+                    {% if patient.secondary_biomarkers.mmse is not none %}<p><b>MMSE</b>: {{patient.secondary_biomarkers.mmse}}</p>{% endif %}
+                    {% if patient.secondary_biomarkers.moca is not none %}<p><b>MoCA</b>: {{patient.secondary_biomarkers.moca}}</p>{% endif %}
+                {% endif %}
+                <a href="{{ url_for('enter_secondary_biomarkers', patient_id=patient.id) }}"
+                   class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">Изменить</a>
+            </div>
+
+            <div class="col-lg-offset-5">
+                <h2>Загрузить серии</h2>
+                <form method="POST" enctype="multipart/form-data" action="{{ url_for('upload_series', patient_id=patient.id) }}">
+                  <input type="file" name="series" multiple="" onchange="this.form.submit()">
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+    {% if patient.series_data.series_dict|length %}
+    <div class="container" style="margin-top:80px">
+        <div class="row">
+            <div class="col-lg-4">
+                <h2>Серии</h2>
+                {% for series in patient.series_data.series_dict.values() %}
+                    {% include '_series.html' %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}

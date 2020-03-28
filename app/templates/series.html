@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf %}
+
+{% block app_content %}
+
+<div class="container">
+    <h1>{{ series.desc }}</h1>
+    <div class="row">
+
+        <div class="col-md-5">
+            <p>Идентификатор: <b>{{ series.id }}</b></p>
+            <p>Дата и время создания: <b>{{ series.dt }}</b></p>
+        </div>
+
+        <div class="col-md-offset-3">
+            <img src="{{ url_for('static', filename=series.img_path) }}">
+        </div>
+    </div>
+</div>
+
+
+<div class="container" style="margin-top:80px">
+    <a href="{{ url_for('route_patient_page', patient_id=patient_id) }}"
+       class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">
+        Вернуться на страницу пациента
+    </a>
+</div>
+
+<div class="container" style="margin-top:80px">
+    <a href="{{ url_for('delete_series', patient_id=patient_id, series_id=series.id) }}"
+       class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">
+        Удалить
+    </a>
+</div>
+
+<div class="container" style="margin-top:80px">
+    <a href="#"
+       class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">
+        Анализ
+    </a>
+</div>
+
+{% endblock %}
