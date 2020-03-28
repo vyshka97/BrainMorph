@@ -6,3 +6,7 @@ __pycache__/
 # Packages
 venv
 .idea
+DICOM_SERIES
+NIFTI_SERIES
+TMP
+app/static/SERIES_IMAGE
