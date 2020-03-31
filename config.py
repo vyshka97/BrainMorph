@@ -38,3 +38,12 @@ class Config:
 
     # расширение для 2D изображений серий
     SERIES_IMG_EXT = os.environ.get("SERIES_IMG_EXT") or ".png"
+
+    # fractional intensity threshold для FSL BET (параметр -f)
+    BET_FRAC = float(os.environ.get("BET_FRAC") or 0.8)
+
+    # Метод корректировки границ выделенных структур для FSL FIRST (параметр -m)
+    FIRST_METHOD = os.environ.get("FIRST_METHOD") or "none"
+
+    # Флаг для включения 3-х этапной регистрации в FSL FIRST (по умолчанию проводится 2-х этапная)
+    FIRST_THREE_STAGE = bool(os.environ.get("FIRST_THREE_STAGE") or False)

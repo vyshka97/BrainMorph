@@ -4,17 +4,41 @@
 {% block app_content %}
 
 <div class="container">
-    <h1>{{ series.desc }}</h1>
     <div class="row">
+        <h1 align="center">{{ series.desc }}</h1>
 
         <div class="col-md-5">
-            <p>Идентификатор: <b>{{ series.id }}</b></p>
-            <p>Дата и время создания: <b>{{ series.dt }}</b></p>
+
+            <p><b>Идентификатор:</b> {{ series.id }}</p>
+
+            <p><b>Дата и время создания:</b> {{ series.dt }}</p>
+
+            {% if series.left_volume is not none %}
+            <p><b>Объем левого гиппокампа:</b> {{ series.left_volume }} мм<sup>3</sup></p>
+            {% endif %}
+
+            {% if series.right_volume is not none %}
+            <p><b>Объем правого гиппокампа:</b> {{ series.right_volume }} мм<sup>3</sup></p>
+            {% endif %}
+
+            {% if series.whole_brain_volume is not none %}
+            <p><b>Объем всего мозга:</b> {{ series.whole_brain_volume }} мм<sup>3</sup></p>
+            {% endif %}
+
+            {% if series.normed_left_volume is not none %}
+            <p><b>Нормированный объем левого гиппокампа:</b> {{ series.normed_left_volume }}</p>
+            {% endif %}
+
+            {% if series.normed_right_volume is not none %}
+            <p><b>Нормированный объем правого гиппокампа:</b> {{ series.normed_right_volume }}</p>
+            {% endif %}
+
         </div>
 
         <div class="col-md-offset-3">
             <img src="{{ url_for('static', filename=series.img_path) }}">
         </div>
+
     </div>
 </div>
 
@@ -33,11 +57,13 @@
     </a>
 </div>
 
+{% if series.left_volume is none %}
 <div class="container" style="margin-top:80px">
-    <a href="#"
+    <a href="{{ url_for('analyze_series', patient_id=patient_id, series_id=series.id) }}"
        class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">
         Анализ
     </a>
 </div>
+{% endif %}
 
 {% endblock %}

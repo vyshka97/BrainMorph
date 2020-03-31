@@ -3,7 +3,8 @@
         <td>
             <a href="{{ url_for('route_series_page', patient_id=patient.id, series_id=series.id) }}">
                 {{ series.desc }}
-            </a> {{ series.dt }}
+            </a>
+            {{ series.dt }}
         </td>
     </tr>
 </table>
