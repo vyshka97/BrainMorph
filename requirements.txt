@@ -1,4 +1,5 @@
 attrs==19.3.0
+blinker==1.4
 certifi==2019.11.28
 chardet==3.0.4
 ci-info==0.1.1
@@ -11,7 +12,9 @@ etelemetry==0.2.0
 filelock==3.0.12
 Flask==1.1.1
 Flask-Bootstrap==3.3.7.1
+Flask-Login==0.5.0
 Flask-PyMongo==2.3.0
+Flask-Sendmail==0.2
 Flask-WTF==0.14.3
 future==0.18.2
 idna==2.9
@@ -21,6 +24,7 @@ itsdangerous==1.1.0
 Jinja2==2.11.1
 joblib==0.14.1
 kiwisolver==1.1.0
+Logbook==1.5.3
 lxml==4.5.0
 MarkupSafe==1.1.1
 matplotlib==3.2.1

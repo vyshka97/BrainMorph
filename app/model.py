@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 
+import random
+import string
+import os
+
 from attr import attrs, attrib, fields, asdict
 from datetime import datetime
 from flask_pymongo import ObjectId
 from typing import List, Any, Dict, Tuple
 from flask import abort
 from flask_login import UserMixin
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
+from docx import Document
 
 from app import patients, flask_app, login, users
 
@@ -29,7 +34,7 @@ class _PatientData:
         return instance
 
 
-@attrs
+@attrs(repr=False)
 class RegistrationData(_PatientData):
     FIELD_NAME = "registration_data"
 
@@ -42,8 +47,14 @@ class RegistrationData(_PatientData):
     def age(self) -> int:
         return (datetime.now() - self.birthday).days // 365
 
+    def __repr__(self) -> str:
+        return f"Фамилия: {self.surname}\n" \
+               f"Имя: {self.name}\n" \
+               f"Возраст: {self.age} лет\n" \
+               f"Номер мобильного телефона: {self.mobile_number}"
 
-@attrs
+
+@attrs(repr=False)
 class PrimaryData(_PatientData):
     FIELD_NAME = "primary_data"
 
@@ -52,16 +63,26 @@ class PrimaryData(_PatientData):
     is_smoking = attrib(type=bool, default=None)
     complaints = attrib(type=str, default=None)
 
+    def __repr__(self) -> str:
+        return f"Рост: {self.height} см\n" \
+               f"Вес: {self.weight} кг\n" \
+               f"Курит?: {'да' if self.is_smoking else 'нет'}\n" \
+               f"Жалобы: {self.complaints}"
 
-@attrs
+
+@attrs(repr=False)
 class SecondaryBiomarkers(_PatientData):
     FIELD_NAME = "secondary_biomarkers"
 
     mmse = attrib(type=int, default=None)
     moca = attrib(type=int, default=None)
 
+    def __repr__(self) -> str:
+        return f"MMSE: {self.mmse}\n" \
+               f"MoCA: {self.moca}"
 
-@attrs(slots=True)
+
+@attrs(slots=True, repr=False)
 class Series:
     id = attrib(type=str)
     desc = attrib(type=str)
@@ -85,6 +106,16 @@ class Series:
         if self.right_volume is not None and self.whole_brain_volume is not None:
             return round(self.right_volume / self.whole_brain_volume, 5)
 
+    def __repr__(self) -> str:
+        return f"Серия - {self.desc}\n" \
+               f"Идентификатор: {self.id}\n" \
+               f"Дата и время создания: {self.dt}\n" \
+               f"Объем левого гиппокампа: {self.left_volume} мм\n" \
+               f"Объем правого гиппокампа: {self.right_volume} мм\n" \
+               f"Объем мозговой ткани: {self.whole_brain_volume} мм\n" \
+               f"Нормализованный объем левого гиппокампа: {self.normed_left_volume}\n" \
+               f"Нормализованный объем правого гиппокампа: {self.normed_right_volume}"
+
 
 @attrs
 class SeriesData(_PatientData):
@@ -96,7 +127,10 @@ class SeriesData(_PatientData):
         if series_id not in self.series_dict:
             abort(404)
 
-        return self.series_dict[series_id]
+        return Series(**self.series_dict[series_id])
+
+    def find_all(self) -> List[Series]:
+        return [Series(**data) for data in self.series_dict.values()]
 
     def insert(self, series: Series) -> None:
         self.series_dict[series.id] = series
@@ -116,6 +150,26 @@ class Patient(_PatientData):
     secondary_biomarkers = attrib(type=SecondaryBiomarkers, default=None)
     series_data = attrib(type=SeriesData, default=None)
 
+    def get_report(self) -> Document:
+        document = Document()
+        document.add_heading("Отчет", level=0)
+
+        document.add_heading("Регистрационные данные", level=1)
+        document.add_paragraph(repr(self.registration_data))
+
+        document.add_heading("Первичные данные", level=1)
+        document.add_paragraph(repr(self.primary_data))
+
+        document.add_heading("Другие биомаркеры", level=1)
+        document.add_paragraph(repr(self.secondary_biomarkers))
+
+        document.add_heading("Серии", level=1)
+        for series in self.series_data.find_all():
+            document.add_paragraph(repr(series))
+            document.add_picture(os.path.join(flask_app.static_folder, series.img_path))
+
+        return document
+
     @classmethod
     def create_from_dict(cls, data: Dict[str, Any]) -> "Patient":
         instance = cls(**{field.name: field.type(**data.get(field.type.FIELD_NAME, {})) for field in fields(Patient)})
@@ -128,11 +182,11 @@ class User(UserMixin):
     id = attrib(type=str)
     password_hash = attrib(type=str)
     email = attrib(type=str)
+    name = attrib(type=str)
+    surname = attrib(type=str)
+    is_admin = attrib(type=bool, default=False)
 
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
+    def check_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
 
     @classmethod
@@ -140,6 +194,12 @@ class User(UserMixin):
         data["id"] = data["_id"]
         del data["_id"]
         return cls(**data)
+
+    @staticmethod
+    def generate_login_password(email: str) -> Tuple[str, str]:
+        password_len = random.randint(8, 16)
+        password = ''.join(random.sample(string.ascii_letters + string.digits, k=password_len))
+        return email.split("@")[0], password
 
 
 class UserCollection:
@@ -150,6 +210,10 @@ class UserCollection:
         data = users.find_one({"_id": user_id})
         if data is not None:
             return User.create_from_dict(data)
+
+    @staticmethod
+    def has_email(email: str) -> bool:
+        return users.find_one({"email": email}) is not None
 
     @staticmethod
     def find_one_or_404(user_id: str) -> User:
@@ -163,6 +227,10 @@ class UserCollection:
     @staticmethod
     def save_data(data: User) -> None:
         users.update_one({"_id": data.id}, {'$set': asdict(data)}, upsert=True)
+
+    @staticmethod
+    def delete_one(user_id: str) -> None:
+        users.delete_one({"_id": user_id})
 
 
 class PatientCollection:

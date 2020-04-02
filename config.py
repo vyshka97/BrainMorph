@@ -18,6 +18,14 @@ class Config:
     MONGODB_USERNAME = os.environ.get("MONGODB_USERNAME")
     MONGODB_PASSWORD = os.environ.get("MONGODB_PASSWORD")
 
+    DEFAULT_MAIL_SENDER = os.environ.get("DEFAULT_MAIL_SENDER") or "noreply@brain-morph.com"
+
+    # MAIL_SERVER = os.environ.get('MAIL_SERVER') or '0.0.0.0'
+    # MAIL_PORT = int(os.environ.get('MAIL_PORT') or 4467)
+    # # MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS') is not None
+    # MAIL_USERNAME = os.environ.get('MAIL_USERNAME') or "noreply@brainmorph.com"
+    # # MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD') or "Dc95jWFdT9EFfUb"
+
     # количество выводимых записей пациентов в пагинации на главной странице
     PATIENTS_PAGE_SIZE = os.environ.get("PATIENTS_PAGE_SIZE") or 3
 

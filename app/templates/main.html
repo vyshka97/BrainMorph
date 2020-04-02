@@ -2,6 +2,7 @@
 
 {% block app_content %}
 
+    {% if not current_user.is_admin %}
     {% if patients is not none %}
     <div class="container">
         <h2 align="center">Список пациентов</h2>
@@ -13,25 +14,49 @@
         <nav aria-label="...">
             <ul class="pager">
 
+                {% if prev_url %}
                 <li class="previous{% if not prev_url %} disabled{% endif %}">
                     <a href="{{ prev_url or '#' }}"><span aria-hidden="true">&larr;</span>Назад</a>
                 </li>
+                {% endif %}
 
+                {% if next_url %}
                 <li class="next{% if not next_url %} disabled{% endif %}">
                     <a href="{{ next_url or '#' }}">Далее <span aria-hidden="true">&rarr;</span></a>
                 </li>
+                {% endif %}
 
             </ul>
         </nav>
 
     </div>
+    {% endif %}
 
     <div class="container" style="margin-top:80px">
         <a href="{{ url_for('patient_registration') }}" class="btn btn-primary btn-lg active btn-block"
            role="button" aria-pressed="true">Создать пациента
         </a>
     </div>
+    {% endif %}
 
+    {% if current_user.is_admin %}
+    {% if users|length > 1 %}
+    <div class="container">
+        <h2 align="center">Пользователи</h2>
+
+        {% for user in users %}
+            {% if not user.is_admin %}
+            {% include '_user.html' %}
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="container" style="margin-top:80px">
+        <a href="{{ url_for('user_register') }}" class="btn btn-primary btn-lg active btn-block"
+           role="button" aria-pressed="true">Добавить нового пользователя
+        </a>
+    </div>
     {% endif %}
 
 {% endblock %}

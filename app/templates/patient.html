@@ -4,6 +4,12 @@
 {% block app_content %}
 
     <div class="container">
+        <a href="{{ url_for('get_patient_report', patient_id=patient.id) }}"
+         class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">Составить отчет
+        </a>
+    </div>
+
+    <div class="container" style="margin-top:80px">
         <div class="row">
 
             <div class="col-lg-4">
@@ -84,7 +90,7 @@
 
                 <form method="POST" enctype="multipart/form-data"
                       action="{{ url_for('upload_series', patient_id=patient.id) }}">
-                  <input type="file" name="series" multiple="" onchange="this.form.submit()">
+                  <input type="file" name="series" multiple="" onchange="this.form.submit(); $('#loading').show(); $('#content').hide(); $('#navbar').hide();">
                 </form>
 
             </div>

@@ -202,7 +202,7 @@ def _convert_series(series_dir: str, nifti_path: str, series_desc: str) -> None:
 
     try:
         dicom_series_to_nifti(series_dir, nifti_path)
-        flash(f"Серия: {series_desc} успешно сохранена")
+        flash(Markup(f"Серия: <b>{series_desc}</b> успешно сохранена"))
     except (ConversionValidationError, ConversionError) as e:
         flash(str(e))
         shutil.rmtree(nifti_dir)
