@@ -9,7 +9,7 @@
         </a>
     </div>
 
-    <div class="container" style="margin-top:80px">
+    <div class="container" style="margin-top:40px">
         <div class="row">
 
             <div class="col-lg-4">
@@ -88,9 +88,9 @@
             <div class="col-lg-offset-5">
                 <h2 align="center">Загрузить серии</h2>
 
-                <form method="POST" enctype="multipart/form-data"
+                <form class="col-sm-offset-4" method="POST" enctype="multipart/form-data"
                       action="{{ url_for('upload_series', patient_id=patient.id) }}">
-                  <input type="file" name="series" multiple="" onchange="this.form.submit(); $('#loading').show(); $('#content').hide(); $('#navbar').hide();">
+                  <input type="file" name="series" multiple="" id="series_loading">
                 </form>
 
             </div>
@@ -105,14 +105,32 @@
             <div class="col-lg-4">
                 <h2 align="center">Серии</h2>
 
-                {% for series in patient.series_data.series_dict.values() %}
-                    {% include '_series.html' %}
-                {% endfor %}
+                <div class="list-group">
+                    {% for series in patient.series_data.series_dict.values() %}
+                        {% include '_series.html' %}
+                    {% endfor %}
+                </div>
 
             </div>
 
         </div>
     </div>
     {% endif %}
+
+{% block scripts %}
+    {{ super() }}
+    <script>
+        var el = document.getElementById('series_loading');
+        el.onchange = preLoadSeries;
+
+        function preLoadSeries() {
+          $('#preloader').show();
+          $('#content').hide();
+          $('#navbar').hide();
+          el.form.submit();
+          return false;
+        }
+    </script>
+{% endblock %}
 
 {% endblock %}

@@ -48,11 +48,11 @@ def route_main_page() -> str:
     page_num = request.args.get('page', 1, type=int)
 
     sort_rules = {
-        "surname": ASCENDING,
-        "name": ASCENDING,
+        f"{RegistrationData.FIELD_NAME}.surname": ASCENDING,
+        f"{RegistrationData.FIELD_NAME}.name": ASCENDING,
     }
 
-    patients, has_next, has_prev = PatientCollection.paginate(page_num, RegistrationData, sort_rules=sort_rules)
+    patients, has_next, has_prev = PatientCollection.paginate(page_num, sort_rules=sort_rules)
 
     url_for_part = partial(url_for, endpoint=route_main_page.__name__)
 
@@ -83,12 +83,12 @@ def patient_registration() -> Union[str, Response]:
         data = RegistrationData(name=form.name.data, surname=form.surname.data, mobile_number=form.mobile_number.data,
                                 birthday=datetime.combine(form.birthday.data, datetime.min.time()))
 
-        PatientCollection.save_data(data, patient_id=form.patient_id.data)
+        patient_id = PatientCollection.save_data(data, patient_id=form.patient_id.data)
 
         flash(Markup("Регистрационные данные обновлены"))
-        return redirect(url_for(patient_registration.__name__))
+        return redirect(url_for(route_patient_page.__name__, patient_id=patient_id))
 
-    return render_template(ViewPage.PATIENT_REGISTRATION.value, title="Ввод регистрационных данных", form=form)
+    return render_template(ViewPage.DATA_ENTRY_FORM.value, title="Ввод регистрационных данных", form=form)
 
 
 @flask_app.route('/patient/<patient_id>')
@@ -100,15 +100,17 @@ def route_patient_page(patient_id: str) -> str:
     return render_template(ViewPage.PATIENT.value, patient=patient, title=title)
 
 
-@flask_app.route('/patient/<patient_id>/primary_data_entry', methods=["GET", "POST"])
+@flask_app.route('/primary_data_entry', methods=["GET", "POST"])
 @login_required
 @user_required
-def enter_primary_data(patient_id: str) -> Union[str, Response]:
+def enter_primary_data() -> Union[str, Response]:
+    patient_id = request.args.get("patient_id", None, type=str)
     form = PatientPrimaryForm()
 
-    if request.method == "GET":
+    if patient_id is not None and request.method == "GET":
         data: PrimaryData = PatientCollection.find_one(patient_id, PrimaryData)
 
+        form.patient_id.data = data.id
         form.height.data = data.height
         form.weight.data = data.weight
         form.is_smoking.data = data.is_smoking
@@ -118,34 +120,36 @@ def enter_primary_data(patient_id: str) -> Union[str, Response]:
         data = PrimaryData(height=form.height.data, weight=form.weight.data, is_smoking=form.is_smoking.data,
                            complaints=form.complaints.data)
 
-        PatientCollection.save_data(data, patient_id=patient_id)
+        PatientCollection.save_data(data, patient_id=form.patient_id.data)
 
         flash(Markup("Первичные данные обновлены"))
-        return redirect(url_for(route_patient_page.__name__, patient_id=patient_id))
+        return redirect(url_for(route_patient_page.__name__, patient_id=form.patient_id.data))
 
-    return render_template(ViewPage.PRIMARY_DATA_ENTRY.value, title="Ввод первичных данных", form=form)
+    return render_template(ViewPage.DATA_ENTRY_FORM.value, title="Ввод первичных данных", form=form)
 
 
 @login_required
-@flask_app.route('/patient/<patient_id>/secondary_biomarker_entry', methods=["GET", "POST"])
+@flask_app.route('/secondary_biomarker_entry', methods=["GET", "POST"])
 @user_required
-def enter_secondary_biomarkers(patient_id: str) -> Union[str, Response]:
+def enter_secondary_biomarkers() -> Union[str, Response]:
+    patient_id = request.args.get("patient_id", None, type=str)
     form = SecondaryBiomarkerForm()
 
     if request.method == "GET":
         data: SecondaryBiomarkers = PatientCollection.find_one(patient_id, SecondaryBiomarkers)
 
+        form.patient_id.data = data.id
         form.mmse.data = data.mmse
         form.moca.data = data.moca
 
     if form.validate_on_submit():
         data = SecondaryBiomarkers(mmse=form.mmse.data, moca=form.moca.data)
-        PatientCollection.save_data(data, patient_id=patient_id)
+        PatientCollection.save_data(data, patient_id=form.patient_id.data)
 
         flash(Markup("Другие биомаркеры обновлены"))
-        return redirect(url_for(route_patient_page.__name__, patient_id=patient_id))
+        return redirect(url_for(route_patient_page.__name__, patient_id=form.patient_id.data))
 
-    return render_template(ViewPage.SECONDARY_BIOMARKERS_ENTRY.value, title="Ввод других биомаркеров", form=form)
+    return render_template(ViewPage.DATA_ENTRY_FORM.value, title="Ввод других биомаркеров", form=form)
 
 
 @flask_app.route("/patient/<patient_id>/upload_series", methods=["POST"])
@@ -241,7 +245,7 @@ def user_register() -> Union[str, Response]:
 
         return redirect(url_for(user_register.__name__))
 
-    return render_template(ViewPage.USER_REGISTRATION.value, title='Регистрация пользователя', form=form)
+    return render_template(ViewPage.DATA_ENTRY_FORM.value, title='Регистрация пользователя', form=form)
 
 
 @flask_app.route("/user/<user_id>/delete")

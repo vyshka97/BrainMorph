@@ -1,10 +1,13 @@
-<table class="table table-hover">
-    <tr>
-        <td>
-            <a href="{{ url_for('route_series_page', patient_id=patient.id, series_id=series.id) }}">
-                {{ series.desc }}
-            </a>
-            {{ series.dt }}
-        </td>
-    </tr>
-</table>
+{% if series.left_volume %}
+{% set item_class = 'list-group-item-success' %}
+{% elif series.error_type %}
+{% set item_class = 'list-group-item-danger' %}
+{% else %}
+{% set item_class = '' %}
+{% endif %}
+
+<a class="list-group-item list-group-item-action {{ item_class }} d-flex justify-content-between align-items-center"
+   href="{{ url_for('route_series_page', patient_id=patient.id, series_id=series.id) }}">
+    <span class="text-info">{{ series.desc }}</span>
+    <span class="badge badge-primary badge-pill">{{ series.slice_count }}</span>
+</a>

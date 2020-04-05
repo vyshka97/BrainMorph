@@ -51,7 +51,7 @@ class RegistrationData(_PatientData):
         return f"Фамилия: {self.surname}\n" \
                f"Имя: {self.name}\n" \
                f"Возраст: {self.age} лет\n" \
-               f"Номер мобильного телефона: {self.mobile_number}"
+               f"Номер мобильного телефона: +7{self.mobile_number}"
 
 
 @attrs(repr=False)
@@ -88,13 +88,17 @@ class Series:
     desc = attrib(type=str)
     dt = attrib(type=datetime)
 
+    slice_count = attrib(type=int)
+
     dicom_path = attrib(type=str)
     nifti_dir = attrib(type=str)
-    img_path = attrib(type=str)
+    img_dir = attrib(type=str)
 
+    # данные, полученные после проведения морфометического анализа
     whole_brain_volume = attrib(type=float, default=None)
     left_volume = attrib(type=float, default=None)
     right_volume = attrib(type=float, default=None)
+    error_type = attrib(type=str, default=None)  # timeout or runtime
 
     @property
     def normed_left_volume(self) -> float:
@@ -106,13 +110,18 @@ class Series:
         if self.right_volume is not None and self.whole_brain_volume is not None:
             return round(self.right_volume / self.whole_brain_volume, 5)
 
+    @property
+    def image_paths(self) -> List[str]:
+        img_dir = os.path.join(flask_app.static_folder, self.img_dir)
+        sorted_list_dir = sorted(os.listdir(img_dir), key=lambda x: int(x.split('.')[0]))
+        return [os.path.join(self.img_dir, basename) for basename in sorted_list_dir]
+
     def __repr__(self) -> str:
-        return f"Серия - {self.desc}\n" \
-               f"Идентификатор: {self.id}\n" \
+        return f"Идентификатор: {self.id}\n" \
                f"Дата и время создания: {self.dt}\n" \
-               f"Объем левого гиппокампа: {self.left_volume} мм\n" \
-               f"Объем правого гиппокампа: {self.right_volume} мм\n" \
-               f"Объем мозговой ткани: {self.whole_brain_volume} мм\n" \
+               f"Объем левого гиппокампа: {self.left_volume} мм\u00b3\n" \
+               f"Объем правого гиппокампа: {self.right_volume} мм\u00b3\n" \
+               f"Объем мозговой ткани: {self.whole_brain_volume} мм\u00b3\n" \
                f"Нормализованный объем левого гиппокампа: {self.normed_left_volume}\n" \
                f"Нормализованный объем правого гиппокампа: {self.normed_right_volume}"
 
@@ -122,6 +131,9 @@ class SeriesData(_PatientData):
     FIELD_NAME = "series_data"
 
     series_dict = attrib(type=Dict[str, Series], default={})
+
+    def __len__(self) -> int:
+        return len(self.series_dict)
 
     def find_or_404(self, series_id: str) -> Series:
         if series_id not in self.series_dict:
@@ -165,8 +177,8 @@ class Patient(_PatientData):
 
         document.add_heading("Серии", level=1)
         for series in self.series_data.find_all():
+            document.add_heading(f"Серия: {series.desc}", level=2)
             document.add_paragraph(repr(series))
-            document.add_picture(os.path.join(flask_app.static_folder, series.img_path))
 
         return document
 
@@ -261,24 +273,32 @@ class PatientCollection:
         patients.update_one({"_id": ObjectId(patient_id)}, {"$unset": {cls.FIELD_NAME: ""}})
 
     @staticmethod
-    def save_data(data: _PatientData, patient_id: str = None) -> None:
+    def save_data(data: _PatientData, patient_id: str = None) -> str:
         if patient_id:
             patients.update_one({"_id": ObjectId(patient_id)}, {'$set': data.serialize()})
+            return patient_id
         else:
-            patients.insert_one(data.serialize())
+            inserted = patients.insert_one(data.serialize())
+            return str(inserted.inserted_id)
 
     @staticmethod
-    def paginate(page_num: int, cls: type, sort_rules: Dict[str, int] = None) -> Tuple[List[_PatientData], bool, bool]:
+    def paginate(page_num: int, cls: type = None, sort_rules: Dict[str, int] = None) -> Tuple[List[_PatientData], bool, bool]:
         PatientCollection.__cls_check(cls)
 
-        cursor = patients.find({}, {cls.FIELD_NAME: 1})
+        _cls = cls or Patient
+
+        if _cls == Patient:
+            cursor = patients.find()
+        else:
+            cursor = patients.find({}, {_cls.FIELD_NAME: 1})
+
         if sort_rules is not None:
             cursor = cursor.sort(list(sort_rules.items()))
 
         skip_cnt = PatientCollection.PAGE_SIZE * (page_num - 1)
         cursor = cursor.skip(skip_cnt).limit(PatientCollection.PAGE_SIZE)
         
-        docs = [cls.create_from_dict(data) for data in cursor]
+        docs = [_cls.create_from_dict(data) for data in cursor]
 
         has_next = patients.estimated_document_count() > page_num * PatientCollection.PAGE_SIZE
         has_prev = page_num > 1

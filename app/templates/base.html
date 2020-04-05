@@ -5,17 +5,14 @@
 {% endblock %}
 
 {% block navbar %}
-    <nav class="navbar navbar-default" id="navbar">
-
+    <nav class="navbar navbar-default" id="navbar" style="background-color: #e3f2fd;">
         <div class="container">
 
             <div class="navbar-header">
                 <span class="navbar-brand">BrainMorph</span>
             </div>
 
-            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
-
-                {% if not current_user.is_anonymous %}
+            {% if not current_user.is_anonymous %}
                 <ul class="nav navbar-nav">
                     <li><a href="{{ url_for('route_main_page') }}">Главная</a></li>
                 </ul>
@@ -23,18 +20,15 @@
                 <ul class="nav navbar-nav navbar-right">
                     <li><a href="{{ url_for('logout') }}">Выйти</a></li>
                 </ul>
-                {% endif %}
-
-            </div>
+            {% endif %}
 
         </div>
-
     </nav>
 {% endblock %}
 
 {% block content %}
 
-    <div id="loading" style="display:none; width: max-content; margin: auto;">
+    <div id="preloader" style="display:none; width: max-content; margin: auto;">
         <img src="{{ url_for('static', filename='preloader.gif') }}">
     </div>
 
@@ -53,9 +47,4 @@
         {% block app_content %}{% endblock %}
 
     </div>
-{% endblock %}
-
-{% block scripts %}
-    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
-    {{ super() }}
 {% endblock %}

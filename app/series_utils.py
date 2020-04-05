@@ -6,24 +6,29 @@ import shutil
 import tarfile
 import hashlib
 import numpy as np
+import matplotlib.pyplot as plt
 
 from flask import request, flash, Markup
 from werkzeug.utils import secure_filename
 from dicom2nifti.exceptions import ConversionError, ConversionValidationError
 from collections import defaultdict, namedtuple
 from dicom2nifti import dicom_series_to_nifti
-from typing import List
+from typing import List, Tuple
 from glob import glob
 from datetime import datetime
-from nilearn.plotting import plot_anat
+from wrapt_timeout_decorator import timeout
+from operator import itemgetter
+from nipype import Node, Workflow
+from nipype.interfaces import fsl
 
-from app import flask_app, Node, Workflow, fsl
+from app import flask_app
 from .model import PatientCollection, SeriesData, Series
 
 __all__ = ["save_files_from_client", "split_on_series", "remove", "analyze"]
 
 # для функции _get_series_info
-SeriesTuple = namedtuple("SeriesTuple", ["id", "desc", "datetime"])
+__SeriesInfo = namedtuple("__SeriesInfo", ["id", "desc", "datetime"])
+__SliceInfo = namedtuple("__SliceInfo", ["number"])
 
 
 def save_files_from_client(patient_id: str) -> None:
@@ -53,7 +58,7 @@ def split_on_series(patient_id: str) -> None:
     После сохранения и конвертации серии, сообщаем клиенту об этом.
     """
 
-    series_data = PatientCollection.find_one(patient_id, SeriesData)
+    series_data: SeriesData = PatientCollection.find_one(patient_id, SeriesData)
 
     tmp_dir = os.path.join(flask_app.config['TMP_FOLDER'], patient_id)
     dicom_dir = os.path.join(flask_app.config['DICOM_FOLDER'], patient_id)
@@ -68,15 +73,16 @@ def split_on_series(patient_id: str) -> None:
         slice_path = os.path.join(tmp_dir, slice_name)
 
         try:
-            series_info = _get_series_info(slice_path)
+            series_info, slice_info = _get_info_from_slice(slice_path)
         except AssertionError as e:
-            shutil.rmtree(tmp_dir)
             flash(Markup(str(e)))
-            return
+            continue
 
-        series_id_to_paths[series_info].append(slice_path)
+        series_id_to_paths[series_info].append((slice_info.number, slice_path))
 
-    for series_info, slice_paths in series_id_to_paths.items():
+    for series_info, values in series_id_to_paths.items():
+
+        slice_paths = [slice_path for _, slice_path in sorted(values, key=lambda x: x[0])]
 
         if series_info.id in series_data.series_dict:
             flash(Markup(f"Серия <b>{series_info.desc}</b> уже хранится в системе"))
@@ -90,6 +96,10 @@ def split_on_series(patient_id: str) -> None:
 
         last_dirname = hashlib.md5(series_info.id.encode()).hexdigest()
         series_dir = os.path.join(dicom_dir, last_dirname)
+
+        img_dir = os.path.join(flask_app.config["SERIES_IMG_FOLDER"], patient_id, last_dirname)
+        _make_series_images(slice_paths, img_dir)
+
         _move_series(slice_paths, series_dir)
 
         nifti_dir = os.path.join(flask_app.config["NIFTI_FOLDER"], patient_id, last_dirname)
@@ -98,12 +108,8 @@ def split_on_series(patient_id: str) -> None:
         _convert_series(series_dir, nifti_path, series_info.desc)
         archive_path = _archive_series(series_dir)
 
-        img_ext = flask_app.config["SERIES_IMG_EXT"]
-        img_path = os.path.join(flask_app.config["SERIES_IMG_FOLDER"], patient_id, last_dirname) + img_ext
-        _make_series_image(nifti_path, img_path)
-
         series = Series(id=series_info.id, desc=series_info.desc, dt=series_info.datetime, dicom_path=archive_path,
-                        nifti_dir=nifti_dir, img_path=img_path)
+                        nifti_dir=nifti_dir, img_dir=img_dir, slice_count=len(slice_paths))
 
         series_data.insert(series)
 
@@ -122,19 +128,24 @@ def remove(patient_id: str, series_id: str) -> None:
     # сначала удаляем запись из документа пациента
     series_data = PatientCollection.find_one(patient_id, SeriesData)
     series = series_data.find_or_404(series_id)
-    desc, dicom_path, nifti_dir, image_path = series.desc, series.dicom_path, series.nifti_dir, series.img_path
+    desc, dicom_path, nifti_dir, img_dir = series.desc, series.dicom_path, series.nifti_dir, series.img_dir
     series_data.remove(series_id)
     PatientCollection.save_data(series_data, patient_id)
 
     # удаляем все пути
     os.remove(dicom_path)
     shutil.rmtree(nifti_dir)
-    os.remove(os.path.join(flask_app.static_folder, image_path))
+    shutil.rmtree(os.path.join(flask_app.static_folder, img_dir))
 
     flash(Markup(f"Серия <b>{desc}</b> удалена"))
 
 
 def analyze(patient_id: str, series_id: str) -> None:
+
+    @timeout(720, use_signals=False)
+    def run_workflow(wf: Workflow):
+        return wf.run(plugin="MultiProc")
+
     series_data = PatientCollection.find_one(patient_id, SeriesData)
     series = series_data.find_or_404(series_id)
 
@@ -167,18 +178,23 @@ def analyze(patient_id: str, series_id: str) -> None:
     workflow.connect(first_node, "original_segmentations", right_stats_node, "in_file")
     workflow.connect(bet_node, "out_file", whole_brain_node, "in_file")
 
-    result_graph = workflow.run()
-    result_nodes = list(result_graph.nodes)
+    try:
+        result_graph = run_workflow(workflow)
+        result_nodes = list(result_graph.nodes)
 
-    post_bet_path = result_nodes[0].result.outputs.out_file
-    post_first_path = result_nodes[1].result.outputs.original_segmentations
+        post_bet_path = result_nodes[0].result.outputs.out_file
+        post_first_path = result_nodes[1].result.outputs.original_segmentations
 
-    shutil.move(post_bet_path, os.path.join(nifti_dir, "post_bet.nii.gz"))
-    shutil.move(post_first_path, os.path.join(nifti_dir, "post_first.nii.gz"))
+        shutil.move(post_bet_path, os.path.join(nifti_dir, "post_bet.nii.gz"))
+        shutil.move(post_first_path, os.path.join(nifti_dir, "post_first.nii.gz"))
 
-    series.left_volume = round(result_nodes[2].result.outputs.out_stat[1], 3)
-    series.right_volume = round(result_nodes[3].result.outputs.out_stat[1], 3)
-    series.whole_brain_volume = round(result_nodes[4].result.outputs.out_stat[1], 3)
+        series.left_volume = round(result_nodes[2].result.outputs.out_stat[1], 3)
+        series.right_volume = round(result_nodes[3].result.outputs.out_stat[1], 3)
+        series.whole_brain_volume = round(result_nodes[4].result.outputs.out_stat[1], 3)
+    except TimeoutError:
+        series.error_type = "timeout"
+    except RuntimeError:
+        series.error_type = "runtime"
 
     paths_to_delete = set(glob(os.path.join(nifti_dir, "*"))) - set(glob(os.path.join(nifti_dir, "*.nii.gz")))
     for path in paths_to_delete:
@@ -222,22 +238,40 @@ def _archive_series(series_dir: str) -> str:
     return archive_path
 
 
-def _make_series_image(nifti_path: str, img_path: str) -> None:
+def _make_series_images(slice_paths: List[str], dir_path: str) -> None:
     """
-    Сделаем и сохраним изображение NIFTI серии в трех проекциях
+    Отберем на примерно одинаковом расстоянии друг от друга срезы из переданного списка и
+    сохраним в отдельной папке их изображения.
     """
-    img_path = os.path.join(flask_app.static_folder, img_path)
-    img_dir = os.path.dirname(img_path)
 
-    if not os.path.isdir(img_dir):
-        os.makedirs(img_dir, exist_ok=True)
+    dir_path_ = os.path.join(flask_app.static_folder, dir_path)
 
-    plot_anat(nifti_path, output_file=img_path)
+    if not os.path.isdir(dir_path_):
+        os.makedirs(dir_path_, exist_ok=True)
+
+    img_ext = flask_app.config["SERIES_IMG_EXT"]
+
+    if len(slice_paths) <= 10:
+        paths_ = slice_paths
+    else:
+        indices = list(np.linspace(0, len(slice_paths) - 1, num=10, dtype=np.int))
+        paths_ = itemgetter(*indices)(slice_paths)
+
+    for path in paths_:
+        header = pydicom.read_file(path)
+        img_path = os.path.join(dir_path_, str(header.InstanceNumber)) + img_ext
+        figure = plt.figure(figsize=(10, 10))
+        plt.imshow(header.pixel_array, 'gray')
+        plt.xticks([])
+        plt.yticks([])
+        plt.gca().set_axis_off()
+        plt.savefig(img_path, bbox_inches='tight', pad_inches=0)
+        plt.close(figure)
 
 
-def _get_series_info(slice_path: str) -> SeriesTuple:
+def _get_info_from_slice(slice_path: str) -> Tuple[__SeriesInfo, __SliceInfo]:
     """
-    Вытаскиваем SeriesInstanceUID из среза. Перед этим проверяем на наличие необходимых для конвертации тегов.
+    Вытаскиваем информацию из среза. Перед этим проверяем на наличие необходимых для конвертации тегов.
     """
     slice_name = os.path.basename(slice_path)
     header = pydicom.read_file(slice_path)
@@ -258,7 +292,10 @@ def _get_series_info(slice_path: str) -> SeriesTuple:
     time, date = header.SeriesTime.split(".")[0], header.SeriesDate
     series_datetime = datetime.strptime(f"{date} {time}", "%Y%m%d %H%M%S")
 
-    return SeriesTuple(header.SeriesInstanceUID, header.SeriesDescription, series_datetime)
+    series_info = __SeriesInfo(header.SeriesInstanceUID, header.SeriesDescription, series_datetime)
+    slice_info = __SliceInfo(int(header.InstanceNumber))
+
+    return series_info, slice_info
 
 
 def _move_series(slice_paths: List[str], series_dir: str) -> None:
@@ -283,8 +320,12 @@ def _validate_series(slice_paths: List[str]) -> None:
 
     first_image_orientation1, first_image_orientation2 = None, None
 
-    for slice_path in slice_paths:
+    for curr_slice_num, slice_path in enumerate(slice_paths, 1):
         header = pydicom.read_file(slice_path)
+
+        slice_num = int(header.InstanceNumber)
+        assert slice_num == curr_slice_num, f"В серии <b>{{}}</b> не хватает среза под номером <b>{curr_slice_num}</b>"
+
         """
         Проверяем, что все срезы имеют одинаковую ориентацию
         https://github.com/icometrix/dicom2nifti/blob/6b8aeb0f291df57ea47aa2d945db84d6ff568903/dicom2nifti/common.py#L688

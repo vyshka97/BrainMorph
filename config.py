@@ -20,12 +20,6 @@ class Config:
 
     DEFAULT_MAIL_SENDER = os.environ.get("DEFAULT_MAIL_SENDER") or "noreply@brain-morph.com"
 
-    # MAIL_SERVER = os.environ.get('MAIL_SERVER') or '0.0.0.0'
-    # MAIL_PORT = int(os.environ.get('MAIL_PORT') or 4467)
-    # # MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS') is not None
-    # MAIL_USERNAME = os.environ.get('MAIL_USERNAME') or "noreply@brainmorph.com"
-    # # MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD') or "Dc95jWFdT9EFfUb"
-
     # количество выводимых записей пациентов в пагинации на главной странице
     PATIENTS_PAGE_SIZE = os.environ.get("PATIENTS_PAGE_SIZE") or 3
 
@@ -55,3 +49,7 @@ class Config:
 
     # Флаг для включения 3-х этапной регистрации в FSL FIRST (по умолчанию проводится 2-х этапная)
     FIRST_THREE_STAGE = bool(os.environ.get("FIRST_THREE_STAGE") or False)
+
+    # путь до папки, куда складывать файлы с описанием падения nipype workflow.
+    # Путь задается относительно корня проекта.
+    NIPYPE_CRASH_DIR = os.environ.get("NIPYPE_CRASH_DIR") or "NIPYPE_CRASHES"

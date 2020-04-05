@@ -1,9 +1,5 @@
-<table class="table table-hover">
-    <tr>
-        <td>
-            <a href="{{ url_for('route_patient_page', patient_id=patient.id) }}">
-                {{ patient.surname }} {{ patient.name }}
-            </a>
-        </td>
-    </tr>
-</table>
+<a class="list-group-item list-group-item-action {{ item_class }} d-flex justify-content-between align-items-center"
+   href="{{ url_for('route_patient_page', patient_id=patient.id) }}" style="margin-bottom: 5px">
+    <span class="text-info">{{ patient.registration_data.surname }} {{ patient.registration_data.name }}</span>
+    <span class="badge badge-primary badge-pill">{{ patient.series_data|length }}</span>
+</a>

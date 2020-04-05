@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 
+import os
+
 from enum import Enum
 from flask import Flask
 from flask_pymongo import PyMongo
 from flask_bootstrap import Bootstrap
 from flask_login import LoginManager
 from flask_sendmail import Mail
-from nipype import Node, Workflow
-from nipype.interfaces import fsl
+from nipype import config, logging
 from werkzeug.security import generate_password_hash
 
 from config import Config
@@ -15,13 +16,10 @@ from config import Config
 
 class ViewPage(Enum):
     MAIN = "main.html"
-    PATIENT_REGISTRATION = "patient_registration.html"
+    DATA_ENTRY_FORM = "data_entry_form.html"
     PATIENT = "patient.html"
-    PRIMARY_DATA_ENTRY = "primary_data_entry.html"
-    SECONDARY_BIOMARKERS_ENTRY = "secondary_biomarkers_entry.html"
     SERIES = "series.html"
     LOGIN = "login.html"
-    USER_REGISTRATION = "user_registration.html"
     EMAIL = "email/login_password.html"
     ERROR_404 = "error/404.html"
     ERROR_500 = "error/500.html"
@@ -39,6 +37,16 @@ bootstrap = Bootstrap(flask_app)
 login = LoginManager(flask_app)
 
 mail = Mail(flask_app)
+
+nipype_crash_dir = flask_app.config["NIPYPE_CRASH_DIR"]
+if not os.path.isdir(nipype_crash_dir):
+    os.makedirs(nipype_crash_dir, exist_ok=True)
+
+nipype_config_dict = {'execution': {
+    'crashdump_dir': os.path.abspath(nipype_crash_dir)
+}}
+config.update_config(nipype_config_dict)
+logging.update_logging(config)
 
 # импортируем внизу во избежание циклических импортов внутри пакета
 from app import routes, model, series_utils, forms, errors, email_utils

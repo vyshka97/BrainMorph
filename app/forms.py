@@ -45,6 +45,8 @@ class PatientRegistrationForm(FlaskForm):
 
 
 class PatientPrimaryForm(FlaskForm):
+    patient_id = HiddenField(default=None)
+
     height = IntegerField("Рост (см)", description="Введите рост пациента",
                           validators=[NumberRange(min=1, max=300, message="Рост должен быть от 1 до 300 включительно")])
 
@@ -57,6 +59,8 @@ class PatientPrimaryForm(FlaskForm):
 
 
 class SecondaryBiomarkerForm(FlaskForm):
+    patient_id = HiddenField(default=None)
+
     mmse = IntegerField("MMSE", description="Введите результат теста MMSE",
                         validators=[NumberRange(min=1, max=30, message="MMSE должен быть от 1 до 30 включительно")])
 
