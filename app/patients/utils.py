@@ -8,7 +8,8 @@ import hashlib
 import numpy as np
 import matplotlib.pyplot as plt
 
-from flask import request, flash, Markup
+from flask import request, flash, Markup, current_app
+from flask_login import current_user
 from werkzeug.utils import secure_filename
 from dicom2nifti.exceptions import ConversionError, ConversionValidationError
 from collections import defaultdict, namedtuple
@@ -17,12 +18,12 @@ from typing import List, Tuple
 from glob import glob
 from datetime import datetime
 from wrapt_timeout_decorator import timeout
-from operator import itemgetter
 from nipype import Node, Workflow
 from nipype.interfaces import fsl
+from pydicom.errors import InvalidDicomError
+from operator import itemgetter
 
-from app import flask_app
-from .model import PatientCollection, SeriesData, Series
+from app.model import *
 
 __all__ = ["save_files_from_client", "split_on_series", "remove", "analyze"]
 
@@ -35,10 +36,12 @@ def save_files_from_client(patient_id: str) -> None:
     """
     Сохраняем все файлы, переданные клиентом, во временную папку
     """
-    tmp_dir = os.path.join(flask_app.config['TMP_FOLDER'], patient_id)
+    tmp_dir = os.path.join(current_app.config['TMP_FOLDER'], patient_id, current_user.id)
 
-    if not os.path.isdir(tmp_dir):
-        os.makedirs(tmp_dir, exist_ok=True)
+    if os.path.isdir(tmp_dir):
+        shutil.rmtree(tmp_dir)
+
+    os.makedirs(tmp_dir, exist_ok=True)
 
     upload_files = request.files.getlist("series")
 
@@ -60,8 +63,8 @@ def split_on_series(patient_id: str) -> None:
 
     series_data: SeriesData = PatientCollection.find_one(patient_id, SeriesData)
 
-    tmp_dir = os.path.join(flask_app.config['TMP_FOLDER'], patient_id)
-    dicom_dir = os.path.join(flask_app.config['DICOM_FOLDER'], patient_id)
+    tmp_dir = os.path.join(current_app.config['TMP_FOLDER'], patient_id, current_user.id)
+    dicom_dir = os.path.join(current_app.config['DICOM_FOLDER'], patient_id)
 
     if not os.path.isdir(dicom_dir):
         os.makedirs(dicom_dir, exist_ok=True)
@@ -76,6 +79,9 @@ def split_on_series(patient_id: str) -> None:
             series_info, slice_info = _get_info_from_slice(slice_path)
         except AssertionError as e:
             flash(Markup(str(e)))
+            continue
+        except InvalidDicomError:
+            flash(Markup(f"Файл <b>{os.path.basename(slice_path)}</b> не формата DICOM"))
             continue
 
         series_id_to_paths[series_info].append((slice_info.number, slice_path))
@@ -94,24 +100,22 @@ def split_on_series(patient_id: str) -> None:
             flash(Markup(str(e).format(series_info.desc)))
             continue
 
-        last_dirname = hashlib.md5(series_info.id.encode()).hexdigest()
-        series_dir = os.path.join(dicom_dir, last_dirname)
+        series_dir = os.path.join(dicom_dir, series_info.id)
 
-        img_dir = os.path.join(flask_app.config["SERIES_IMG_FOLDER"], patient_id, last_dirname)
+        nifti_dir = os.path.join(current_app.config["NIFTI_FOLDER"], patient_id, series_info.id)
+        nifti_path = os.path.join(nifti_dir, "original" + current_app.config["NIFTI_EXT"])
+
+        img_dir = os.path.join(current_app.config["SERIES_IMG_FOLDER"], patient_id, series_info.id)
         _make_series_images(slice_paths, img_dir)
 
         _move_series(slice_paths, series_dir)
 
-        nifti_dir = os.path.join(flask_app.config["NIFTI_FOLDER"], patient_id, last_dirname)
-        nifti_path = os.path.join(nifti_dir, "original" + flask_app.config["NIFTI_EXT"])
-
         _convert_series(series_dir, nifti_path, series_info.desc)
         archive_path = _archive_series(series_dir)
 
-        series = Series(id=series_info.id, desc=series_info.desc, dt=series_info.datetime, dicom_path=archive_path,
+        series = Series(desc=series_info.desc, dt=series_info.datetime, dicom_path=archive_path,
                         nifti_dir=nifti_dir, img_dir=img_dir, slice_count=len(slice_paths))
-
-        series_data.insert(series)
+        series_data.insert(series, series_info.id)
 
     # сохраняем пути в БД
     PatientCollection.save_data(series_data, patient_id=patient_id)
@@ -126,7 +130,7 @@ def remove(patient_id: str, series_id: str) -> None:
     """
 
     # сначала удаляем запись из документа пациента
-    series_data = PatientCollection.find_one(patient_id, SeriesData)
+    series_data: SeriesData = PatientCollection.find_one(patient_id, SeriesData)
     series = series_data.find_or_404(series_id)
     desc, dicom_path, nifti_dir, img_dir = series.desc, series.dicom_path, series.nifti_dir, series.img_dir
     series_data.remove(series_id)
@@ -135,18 +139,20 @@ def remove(patient_id: str, series_id: str) -> None:
     # удаляем все пути
     os.remove(dicom_path)
     shutil.rmtree(nifti_dir)
-    shutil.rmtree(os.path.join(flask_app.static_folder, img_dir))
+    shutil.rmtree(os.path.join(current_app.static_folder, img_dir))
 
     flash(Markup(f"Серия <b>{desc}</b> удалена"))
 
 
 def analyze(patient_id: str, series_id: str) -> None:
 
-    @timeout(720, use_signals=False)
+    timeout_value = current_app.config["TIMEOUT_VALUE"]
+
+    @timeout(timeout_value, use_signals=False)
     def run_workflow(wf: Workflow):
         return wf.run(plugin="MultiProc")
 
-    series_data = PatientCollection.find_one(patient_id, SeriesData)
+    series_data: SeriesData = PatientCollection.find_one(patient_id, SeriesData)
     series = series_data.find_or_404(series_id)
 
     nifti_dir = series.nifti_dir
@@ -154,11 +160,11 @@ def analyze(patient_id: str, series_id: str) -> None:
 
     workflow = Workflow(name=os.path.basename(nifti_dir), base_dir=os.path.dirname(nifti_dir))
 
-    frac = flask_app.config["BET_FRAC"]
+    frac = current_app.config["BET_FRAC"]
     bet_interface = fsl.BET(in_file=os.path.abspath(nifti_path), frac=frac, robust=True)
 
-    method = flask_app.config["FIRST_METHOD"]
-    three_stage = flask_app.config["FIRST_THREE_STAGE"]
+    method = current_app.config["FIRST_METHOD"]
+    three_stage = current_app.config["FIRST_THREE_STAGE"]
     first_interface = fsl.FIRST(method=method, brain_extracted=True, list_of_specific_structures=["L_Hipp", "R_Hipp"])
     if three_stage:
         first_interface.inputs.args = "-3"
@@ -185,16 +191,20 @@ def analyze(patient_id: str, series_id: str) -> None:
         post_bet_path = result_nodes[0].result.outputs.out_file
         post_first_path = result_nodes[1].result.outputs.original_segmentations
 
-        shutil.move(post_bet_path, os.path.join(nifti_dir, "post_bet.nii.gz"))
-        shutil.move(post_first_path, os.path.join(nifti_dir, "post_first.nii.gz"))
+        new_post_bet_path = os.path.join(nifti_dir, "post_bet.nii.gz")
+        new_post_first_path = os.path.join(nifti_dir, "post_first.nii.gz")
+
+        shutil.move(post_bet_path, new_post_bet_path)
+        shutil.move(post_first_path, new_post_first_path)
 
         series.left_volume = round(result_nodes[2].result.outputs.out_stat[1], 3)
         series.right_volume = round(result_nodes[3].result.outputs.out_stat[1], 3)
         series.whole_brain_volume = round(result_nodes[4].result.outputs.out_stat[1], 3)
+        series.status = "ok"
     except TimeoutError:
-        series.error_type = "timeout"
+        series.status = "timeout"
     except RuntimeError:
-        series.error_type = "runtime"
+        series.status = "runtime error"
 
     paths_to_delete = set(glob(os.path.join(nifti_dir, "*"))) - set(glob(os.path.join(nifti_dir, "*.nii.gz")))
     for path in paths_to_delete:
@@ -203,7 +213,7 @@ def analyze(patient_id: str, series_id: str) -> None:
         else:
             os.remove(path)
 
-    series_data.insert(series)
+    series_data.insert(series, series_id)
     PatientCollection.save_data(series_data, patient_id)
 
 
@@ -244,12 +254,12 @@ def _make_series_images(slice_paths: List[str], dir_path: str) -> None:
     сохраним в отдельной папке их изображения.
     """
 
-    dir_path_ = os.path.join(flask_app.static_folder, dir_path)
+    dir_path_ = os.path.join(current_app.static_folder, dir_path)
 
     if not os.path.isdir(dir_path_):
         os.makedirs(dir_path_, exist_ok=True)
 
-    img_ext = flask_app.config["SERIES_IMG_EXT"]
+    img_ext = current_app.config["SERIES_IMG_EXT"]
 
     if len(slice_paths) <= 10:
         paths_ = slice_paths
@@ -292,7 +302,9 @@ def _get_info_from_slice(slice_path: str) -> Tuple[__SeriesInfo, __SliceInfo]:
     time, date = header.SeriesTime.split(".")[0], header.SeriesDate
     series_datetime = datetime.strptime(f"{date} {time}", "%Y%m%d %H%M%S")
 
-    series_info = __SeriesInfo(header.SeriesInstanceUID, header.SeriesDescription, series_datetime)
+    slice_id = hashlib.md5(str(header.SeriesInstanceUID).encode()).hexdigest()
+
+    series_info = __SeriesInfo(slice_id, header.SeriesDescription, series_datetime)
     slice_info = __SliceInfo(int(header.InstanceNumber))
 
     return series_info, slice_info

@@ -2,9 +2,8 @@
 {% import 'bootstrap/wtf.html' as wtf %}
 
 {% block app_content %}
-
     <div class="container">
-        <a href="{{ url_for('get_patient_report', patient_id=patient.id) }}"
+        <a href="{{ url_for('patients.get_report', patient_id=patient.id) }}"
          class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">Составить отчет
         </a>
     </div>
@@ -23,7 +22,7 @@
 
                 <p><b>Номер мобильного телефона</b>: +7{{ patient.registration_data.mobile_number }}</p>
 
-                <a href="{{ url_for('patient_registration', patient_id=patient.id) }}"
+                <a href="{{ url_for('patients.register', patient_id=patient.id) }}"
                    class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">Изменить
                 </a>
 
@@ -52,7 +51,7 @@
 
                 {% endif %}
 
-                <a href="{{ url_for('enter_primary_data', patient_id=patient.id) }}"
+                <a href="{{ url_for('patients.enter_primary_data', patient_id=patient.id) }}"
                    class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">Изменить
                 </a>
 
@@ -79,7 +78,7 @@
 
                 {% endif %}
 
-                <a href="{{ url_for('enter_secondary_biomarkers', patient_id=patient.id) }}"
+                <a href="{{ url_for('patients.enter_secondary_biomarkers', patient_id=patient.id) }}"
                    class="btn btn-primary btn-lg active btn-block" role="button" aria-pressed="true">Изменить
                 </a>
 
@@ -88,9 +87,10 @@
             <div class="col-lg-offset-5">
                 <h2 align="center">Загрузить серии</h2>
 
-                <form class="col-sm-offset-4" method="POST" enctype="multipart/form-data"
-                      action="{{ url_for('upload_series', patient_id=patient.id) }}">
-                  <input type="file" name="series" multiple="" id="series_loading">
+                <form class="col-sm-offset-4 form" method="POST" enctype="multipart/form-data" role="form"
+                      action="{{ url_for('patients.upload_series', patient_id=patient.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="file" name="series" multiple="" id="series_loading">
                 </form>
 
             </div>
@@ -106,8 +106,8 @@
                 <h2 align="center">Серии</h2>
 
                 <div class="list-group">
-                    {% for series in patient.series_data.series_dict.values() %}
-                        {% include '_series.html' %}
+                    {% for series in patient.series_data.find_all() %}
+                        {% include 'patients/_series.html' %}
                     {% endfor %}
                 </div>
 
@@ -116,6 +116,8 @@
         </div>
     </div>
     {% endif %}
+
+<p class="collapse" id="collapseExample">lalalal</p>
 
 {% block scripts %}
     {{ super() }}

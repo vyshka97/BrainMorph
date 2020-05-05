@@ -14,11 +14,11 @@
 
             {% if not current_user.is_anonymous %}
                 <ul class="nav navbar-nav">
-                    <li><a href="{{ url_for('route_main_page') }}">Главная</a></li>
+                    <li><a href="{{ url_for('main.route_page') }}">Главная</a></li>
                 </ul>
 
                 <ul class="nav navbar-nav navbar-right">
-                    <li><a href="{{ url_for('logout') }}">Выйти</a></li>
+                    <li><a href="{{ url_for('users.logout') }}">Выйти</a></li>
                 </ul>
             {% endif %}
 
@@ -47,4 +47,20 @@
         {% block app_content %}{% endblock %}
 
     </div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script>
+        document.getElementById('telephone').addEventListener("keypress", function(){
+            if (/^[0-9]{3}$/.test(this.value))
+                this.value = "(" + this.value + ") ";
+
+            if (/^\([0-9]{3}\) [0-9]{3}$/.test(this.value))
+                this.value = this.value + "-";
+
+            if (/^\([0-9]{3}\) [0-9]{3}-[0-9]{2}$/.test(this.value))
+                this.value = this.value + "-";
+            });
+    </script>
 {% endblock %}

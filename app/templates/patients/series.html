@@ -3,7 +3,7 @@
 
 {% block app_content %}
 
-{% if series.error_type %}
+{% if series.status and series.status != 'ok' %}
 <div class="alert alert-danger" role="alert">
   <h4 class="alert-heading">Произошла ошибка во время анализа!</h4>
   <p>Во время анализа этой серии произошла ошибка. Рекомендуется удалить данную серию с записи пациента.</p>
@@ -16,10 +16,9 @@
     <div class="row">
 
         <div class="col-md-5">
-
-            <p><b>Идентификатор:</b> {{ series.id }}</p>
-
             <p><b>Дата и время создания:</b> {{ series.dt }}</p>
+
+            <p><b>Количество срезов:</b> {{ series.slice_count }}</p>
 
             {% if series.left_volume is not none %}
             <p><b>Объем левого гиппокампа:</b> {{ series.left_volume }} мм<sup>3</sup></p>
@@ -44,18 +43,18 @@
         </div>
 
         <div class="col-md-5 btn-group-vertical">
-            <a href="{{ url_for('route_patient_page', patient_id=patient_id) }}" role="button" aria-pressed="true"
+            <a href="{{ url_for('patients.route_page', patient_id=patient_id) }}" role="button" aria-pressed="true"
                class="btn btn-primary btn-lg active btn-block">
                 Вернуться на страницу пациента
             </a>
 
-            <a href="{{ url_for('delete_series', patient_id=patient_id, series_id=series.id) }}" role="button"
+            <a href="{{ url_for('patients.delete_series', patient_id=patient_id, series_id=series.id) }}" role="button"
                style="margin-top: 10px" class="btn btn-primary btn-lg active btn-block" aria-pressed="true">
                 Удалить
             </a>
 
             {% if series.left_volume is none %}
-            <a href="{{ url_for('analyze_series', patient_id=patient_id, series_id=series.id) }}" role="button"
+            <a href="{{ url_for('patients.analyze_series', patient_id=patient_id, series_id=series.id) }}" role="button"
                class="btn btn-primary btn-lg active btn-block" aria-pressed="true" style="margin-top: 10px" id="analyzing">
                 Анализ
             </a>

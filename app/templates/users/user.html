@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf %}
+
+{% block app_content %}
+
+<div class="container">
+    <p class="h1 text-center">{{ user.name }} {{ user.surname }}</p>
+
+    <div class="col-lg-offset-7 btn-group-vertical">
+        <a href="{{ url_for('users.delete', user_id=user.id) }}" role="button"
+           class="btn btn-primary btn-lg active btn-block" aria-pressed="true">
+            Удалить
+        </a>
+
+        <a href="{{ url_for('users.send_data', user_id=user.id) }}" role="button" style="margin-top: 10px"
+           class="btn btn-primary btn-lg active btn-block" aria-pressed="true">
+            Отправить данные авторизации
+        </a>
+
+    </div>
+</div>
+
+{% endblock %}
